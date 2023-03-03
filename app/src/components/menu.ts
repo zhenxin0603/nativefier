@@ -364,7 +364,7 @@ export function generateMenu(
     menuTemplate = [editMenu, viewMenu, windowMenu, helpMenu];
   }
 
-  return menuTemplate;
+  return [];//menuTemplate;
 }
 
 function injectBookmarks(menuTemplate: MenuItemConstructorOptions[]): void {

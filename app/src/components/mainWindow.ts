@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { ipcMain, BrowserWindow, Event } from 'electron';
+import { ipcMain, BrowserWindow, Event,dialog } from 'electron';
 import windowStateKeeper from 'electron-window-state';
 
 import { initContextMenu } from './contextMenu';
@@ -185,6 +185,21 @@ export function saveAppArgs(newAppArgs: OutputOptions): void {
 function setupCloseEvent(options: OutputOptions, window: BrowserWindow): void {
   window.on('close', (event: Event) => {
     log.debug('mainWindow.close', event);
+
+    const choice = dialog.showMessageBoxSync(window, {
+      type: 'question',
+      buttons: ['确定', '取消'],
+      message:
+        '确认要退出吗？',
+      title: '提示',
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (choice === 1) {
+      event.preventDefault();
+      return;
+    }
+
     if (window.isFullScreen()) {
       if (nativeTabsSupported()) {
         window.moveTabToNewWindow();
