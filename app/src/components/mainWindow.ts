@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { ipcMain, BrowserWindow, Event,dialog } from 'electron';
+import { ipcMain, BrowserWindow, Event, dialog, app, shell, ipcRenderer } from 'electron';
 import windowStateKeeper from 'electron-window-state';
 
 import { initContextMenu } from './contextMenu';
@@ -126,6 +126,60 @@ export async function createMainWindow(
       ).catch((err) => log.error('onNewWindow ERROR', err));
     },
   );
+
+  mainWindow.webContents.session.on('will-download', (event, item, webContents) => {
+		const window_ =  BrowserWindow.fromWebContents(webContents) ;
+    const filePath = path.join(app.getPath('downloads'), item.getFilename());
+    item.setSavePath(filePath);
+    item.on('updated', (event, state) => {
+      if (state === 'progressing') {
+        if (!item.isPaused()) {
+          console.log(item.getFilename(), item.getReceivedBytes(), item.getTotalBytes(), (item.getReceivedBytes() * 100 / item.getTotalBytes()).toFixed(2) + "%");
+          if (mainWindow.isDestroyed()) {
+            return;
+          }
+          mainWindow.webContents.send('down-process', {
+            name: item.getFilename(),
+            receive: item.getReceivedBytes(),
+            total: item.getTotalBytes(),
+          });
+          mainWindow.setProgressBar(item.getReceivedBytes() / item.getTotalBytes());
+        }
+      } else if (state === 'interrupted') {
+        console.log('Download is interrupted but can be resumed')
+      }
+    })
+    item.once('done', (event, state) => {
+      if (state === 'completed') {
+        if (process.platform == 'darwin') {
+          app.dock.downloadFinished(item.getSavePath());
+        }
+        if (mainWindow.isDestroyed()) {
+          return;
+        }
+        mainWindow.webContents.send('down-done', {
+          name: item.getFilename(),
+          receive: item.getReceivedBytes(),
+          total: item.getTotalBytes(),
+        });
+        mainWindow.setProgressBar(-1);
+        window_?.close();
+        shell.openExternal(item.getSavePath());
+      } else if (state == "cancelled") {
+        mainWindow.webContents.send('down-cancle', {
+          name: item.getFilename()
+        });
+      } else {
+        //state === 'interrupted'
+        console.log(`Download failed: ${state}`)
+        dialog.showErrorBox('下载失败', `文件 ${item.getFilename()} 因为某些原因被中断下载`);
+        mainWindow.webContents.send('down-fail', {
+          name: item.getFilename()
+        });
+      }
+    })
+  })
+
   // @ts-expect-error new-tab isn't in the type definition, but it does exist
   mainWindow.on('new-tab', () => {
     createNewTab(
